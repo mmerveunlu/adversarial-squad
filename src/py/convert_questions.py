@@ -3,11 +3,13 @@ import argparse
 import collections
 import json
 import math
+import sys
+sys.path.insert(0, 'nectar/nectar/corenlp')
 from nectar import corenlp
 from nltk.corpus import wordnet as wn
 from nltk.stem.lancaster import LancasterStemmer
 import os
-from pattern import en as patten
+from pattern import en as pattern
 import random
 import re
 from termcolor import colored
@@ -40,16 +42,18 @@ PATTERN_TENSES = ['inf', '3sg', 'p', 'part', 'ppart', '1sg']
 
 # Constants
 DATASETS = {
-    'dev': 'data/squad/dev-v1.1.json',
+    'dev': 'data/LecturesEE/train-model-lectures-ee.json',
     'sample1k': 'out/none_n1000_k1_s0.json',
-    'train': 'data/squad/train-v1.1.json',
+    'train': 'data/LecturesEE/train-model-lectures-ee.json',
+    'data_dir':'data/LecturesEE/'
 }
 CORENLP_CACHES = {
-    'dev': 'data/squad/corenlp_cache.json',
-    'sample1k': 'data/squad/corenlp_cache.json',
-    'train': 'data/squad/train_corenlp_cache.json',
+    'dev': 'data/LecturesEE/corenlp_cache.json',
+    'sample1k': 'data/LecturesEE/corenlp_cache.json',
+    'train': 'data/LecturesEE/train_corenlp_cache.json',
+    'data_dir':'data/LecturesEE/'
 }
-NEARBY_GLOVE_FILE = 'out/nearby_n100_glove_6B_100d.json'
+NEARBY_GLOVE_FILE = 'out-lecturesee/nearby_n100_glove_6B_100d.json'
 POSTAG_FILE = 'data/postag_dict.json'
 CORENLP_LOG = 'corenlp.log'
 CORENLP_PORT = 8101
@@ -218,15 +222,15 @@ def run_postprocessing(s, rules, all_args):
     elif rule.startswith('tense-'):
       ind = int(rule[6:])
       orig_vb = all_args[ind]
-      tenses = patten.tenses(orig_vb)
+      tenses = pattern.tenses(orig_vb)
       for tense in PATTERN_TENSES:  # Prioritize by PATTERN_TENSES
         if tense in tenses:
           break
       else:  # Default to first tense
         tense = PATTERN_TENSES[0]
-      s = patten.conjugate(s, tense)
+      s = pattern.conjugate(s, tense)
     elif rule in POS_TO_PATTERN:
-      s = patten.conjugate(s, POS_TO_PATTERN[rule])
+      s = pattern.conjugate(s, POS_TO_PATTERN[rule])
   return s
 
 def convert_whp(node, q, a, tokens):
@@ -238,7 +242,7 @@ def convert_whp(node, q, a, tokens):
       phrase = r.convert(cur_phrase, a, cur_tokens, node, run_fix_style=False)
       if phrase:
         if not OPTS.quiet:
-          print ('  WHP Rule "%s": %s' % (r.name, colored(phrase, 'yellow'))).encode('utf-8')
+          print('  WHP Rule "%s": %s' % (r.name, colored(phrase, 'yellow')))
         return phrase
   return None
 
@@ -251,7 +255,7 @@ class ConstituencyRule(ConversionRule):
   """A rule for converting question to sentence based on constituency parse."""
   def __init__(self, in_pattern, out_pattern, postproc=None):
     self.in_pattern = in_pattern   # e.g. "where did $NP $VP"
-    self.out_pattern = unicode(out_pattern)
+    self.out_pattern = str(out_pattern)
         # e.g. "{1} did {2} at {0}."  Answer is always 0
     self.name = in_pattern
     if postproc:
@@ -307,7 +311,7 @@ class ReplaceRule(ConversionRule):
   """A simple rule that replaces some tokens with the answer."""
   def __init__(self, target, replacement='{}', start=False):
     self.target = target
-    self.replacement = unicode(replacement)
+    self.replacement = str(replacement)
     self.name = 'replace(%s)' % target
     self.start = start
 
@@ -462,24 +466,25 @@ def get_qas(dataset):
 def print_questions(qas):
   qas = sorted(qas, key=lambda x: x[0])
   for question, answers, context in qas:
-    print question.encode('utf-8')
+    print(question.encode('utf-8'))
 
 def print_answers(qas):
   for question, answers, context in qas:
     toks = list(answers)
     toks[0] = colored(answers[0]['text'], 'cyan')
-    print ', '.join(toks).encode('utf-8')
+    print(', '.join(toks).encode('utf-8'))
 
 def run_corenlp(dataset, qas):
   cache = {}
   with corenlp.CoreNLPServer(port=CORENLP_PORT, logfile=CORENLP_LOG) as server:
     client = corenlp.CoreNLPClient(port=CORENLP_PORT)
-    print >> sys.stderr, 'Running NER for paragraphs...'
+    print('Running NER for paragraphs...')
     for article in dataset['data']:
       for paragraph in article['paragraphs']:
         response = client.query_ner(paragraph['context'])
+        print("Response from server: ",response)
         cache[paragraph['context']] = response
-    print >> sys.stderr, 'Parsing questions...'
+    print('Parsing questions...')
     for question, answers, context in qas:
       response = client.query_const_parse(question, add_ner=True)
       cache[question] = response['sentences'][0]
@@ -498,13 +503,13 @@ def run_conversion(qas):
     const_parse = read_const_parse(parse['parse'])
     answer = answers[0]['text']
     if not OPTS.quiet:
-      print question.encode('utf-8')
+      print(question.encode('utf-8'))
     for rule in CONVERSION_RULES:
       sent = rule.convert(question, answer, tokens, const_parse)
       if sent:
         if not OPTS.quiet:
-          print ('  Rule "%s": %s' % (rule.name, colored(sent, 'green'))
-                 ).encode('utf-8')
+          print(('  Rule "%s": %s' % (rule.name, colored(sent, 'green'))
+                 ).encode('utf-8'))
         rule_counter[rule.name] += 1
         num_matched += 1
         break
@@ -512,19 +517,19 @@ def run_conversion(qas):
       unmatched_qas.append((question, answer))
   # Print stats
   if not OPTS.quiet:
-    print
-  print '=== Summary ==='
-  print 'Matched %d/%d = %.2f%% questions' % (
-      num_matched, len(qas), 100.0 * num_matched / len(qas))
+    print()
+  print('=== Summary ===')
+  print('Matched %d/%d = %.2f%% questions' % (
+      num_matched, len(qas), 100.0 * num_matched / len(qas)))
   for rule in CONVERSION_RULES:
     num = rule_counter[rule.name]
-    print '  Rule "%s" used %d times = %.2f%%' % (
-        rule.name, num, 100.0 * num / len(qas))
+    print('  Rule "%s" used %d times = %.2f%%' % (
+        rule.name, num, 100.0 * num / len(qas)))
 
-  print
-  print '=== Sampled unmatched questions ==='
+  print()
+  print('=== Sampled unmatched questions ===')
   for q, a in sorted(random.sample(unmatched_qas, 20), key=lambda x: x[0]):
-    print ('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8')
+    print(('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8'))
     parse = corenlp_cache[q]
     const_parse = read_const_parse(parse['parse'])
     #const_parse.print_tree()
@@ -539,12 +544,12 @@ def inspect_rule(qas, rule_name):
     func = rule(question, parse)
     if func:
       sent = colored(func(answer), 'green')
-      print question.encode('utf-8')
-      print ('  Rule "%s": %s' % (rule_name, sent)).encode('utf-8')
+      print(question.encode('utf-8'))
+      print(('  Rule "%s": %s' % (rule_name, sent)).encode('utf-8'))
       num_matched += 1
-  print
-  print 'Rule "%s" used %d times = %.2f%%' % (
-      rule_name, num_matched, 100.0 * num_matched / len(qas))
+  print()
+  print('Rule "%s" used %d times = %.2f%%' % (
+      rule_name, num_matched, 100.0 * num_matched / len(qas)))
 
 ##########
 # Rules for altering words in a sentence/question/answer
@@ -669,7 +674,9 @@ HIGH_CONF_ALTER_RULES = collections.OrderedDict([
     ('entityType', alter_entity_type),
     #('entity_glove', alter_entity_glove),
 ])
-ALL_ALTER_RULES = collections.OrderedDict(HIGH_CONF_ALTER_RULES.items() + [
+ALL_ALTER_RULES = collections.OrderedDict(HIGH_CONF_ALTER_RULES.items())
+
+ALL_ALTER_RULES.update([
     ('nearbyAdj', alter_nearby(['JJ', 'JJR', 'JJS'])),
     ('nearbyNoun', alter_nearby(['NN', 'NNS'])),
     #('nearbyNoun', alter_nearby(['NN', 'NNS'], ignore_pos=True)),
@@ -764,7 +771,7 @@ def alter_questions(qas, alteration_strategy=None):
     const_parse = read_const_parse(parse['parse'])
     answer = answers[0]['text']
     if not OPTS.quiet:
-      print question.encode('utf-8')
+      print(question.encode('utf-8'))
     new_qs = alter_question(
         question, tokens, const_parse, nearby_word_dict, postag_dict,
         strategy=alteration_strategy)
@@ -775,23 +782,23 @@ def alter_questions(qas, alteration_strategy=None):
         rule_counter[r] += 1
       for q, new_toks, new_const_parse, tag  in new_qs:
         rule = tag.split('-')[0]
-        print ('  Rule %s: %s' % (rule, colorize_alterations(new_toks))).encode('utf-8')
+        print(('  Rule %s: %s' % (rule, colorize_alterations(new_toks))).encode('utf-8'))
     else:
       unmatched_qas.append((question, answer))
   # Print stats
   if not OPTS.quiet:
-    print
-  print '=== Summary ==='
-  print 'Matched %d/%d = %.2f%% questions' % (
-      num_matched, len(qas), 100.0 * num_matched / len(qas))
+    print()
+  print('=== Summary ===')
+  print('Matched %d/%d = %.2f%% questions' % (
+      num_matched, len(qas), 100.0 * num_matched / len(qas)))
   for rule_name in ALL_ALTER_RULES:
     num = rule_counter[rule_name]
-    print '  Rule "%s" used %d times = %.2f%%' % (
-        rule_name, num, 100.0 * num / len(qas))
-  print
-  print '=== Sampled unmatched questions ==='
+    print('  Rule "%s" used %d times = %.2f%%' % (
+        rule_name, num, 100.0 * num / len(qas)))
+  print()
+  print('=== Sampled unmatched questions ===')
   for q, a in sorted(random.sample(unmatched_qas, 20), key=lambda x: x[0]):
-    print ('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8')
+    print(('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8'))
 
 def get_tokens_for_answers(answer_objs, corenlp_obj):
   """Get CoreNLP tokens corresponding to a SQuAD answer object."""
@@ -1036,33 +1043,33 @@ def generate_answers(qas):
     determiner = get_determiner_for_answers(answers)
     answer = answers[ind]
     if not OPTS.quiet:
-      print ('%s [%s]' % (question, colored(answer['text'], 'cyan'))).encode('utf-8')
+      print(('%s [%s]' % (question, colored(answer['text'], 'cyan'))).encode('utf-8'))
     for rule_name, func in ANSWER_RULES:
       new_ans = func(answer, tokens, question, determiner=determiner)
       if new_ans:
         num_matched += 1
         rule_counter[rule_name] += 1
         if not OPTS.quiet:
-          print ('  Rule %s: %s' % (rule_name, colored(new_ans, 'green'))).encode('utf-8')
+          print(('  Rule %s: %s' % (rule_name, colored(new_ans, 'green'))).encode('utf-8'))
         break
     else:
       unmatched_qas.append((question, answer['text']))
   # Print stats
   if not OPTS.quiet:
-    print
-  print '=== Summary ==='
-  print 'Matched %d/%d = %.2f%% questions' % (
-      num_matched, len(qas), 100.0 * num_matched / len(qas))
-  print
+    print()
+  print('=== Summary ===')
+  print('Matched %d/%d = %.2f%% questions' % (
+      num_matched, len(qas), 100.0 * num_matched / len(qas)))
+  print()
   for rule_name, func in ANSWER_RULES:
     num = rule_counter[rule_name]
-    print '  Rule "%s" used %d times = %.2f%%' % (
-        rule_name, num, 100.0 * num / len(qas))
-  print
-  print '=== Sampled unmatched answers ==='
+    print('  Rule "%s" used %d times = %.2f%%' % (
+        rule_name, num, 100.0 * num / len(qas)))
+  print()
+  print('=== Sampled unmatched answers ===')
   for q, a in sorted(random.sample(unmatched_qas, min(20, len(unmatched_qas))),
                      key=lambda x: x[0]):
-    print ('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8')
+    print(('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8'))
 
 def run_end2end(qas, alteration_strategy=None):
   corenlp_cache = load_cache()
@@ -1074,8 +1081,8 @@ def run_end2end(qas, alteration_strategy=None):
   num_matched = 0
   for question, answers, context in qas:
     if not OPTS.quiet:
-      print question.encode('utf-8')
-      print ('  Original Answers: [%s]' % (', '.join(x['text'] for x in answers))).encode('utf-8')
+      print(question.encode('utf-8'))
+      print(('  Original Answers: [%s]' % (', '.join(x['text'] for x in answers))).encode('utf-8'))
     # Make up answer
     p_parse = corenlp_cache[context]
     ind, a_toks = get_tokens_for_answers(answers, p_parse)
@@ -1087,7 +1094,7 @@ def run_end2end(qas, alteration_strategy=None):
     else:
       raise ValueError('Missing answer')
     if not OPTS.quiet:
-      print ('  New Answer: %s' % colored(answer, 'red')).encode('utf-8')
+      print(('  New Answer: %s' % colored(answer, 'red')).encode('utf-8'))
 
     # Alter question
     parse = corenlp_cache[question]
@@ -1108,8 +1115,8 @@ def run_end2end(qas, alteration_strategy=None):
       for q, q_tokens, q_const_parse, tag  in new_qs:
         alt_rule_str = tag.split('-')[0]
         if not OPTS.quiet:
-          print ('  Alter "%s": %s' % (
-              alt_rule_str, colorize_alterations(q_tokens))).encode('utf-8')
+          print(('  Alter "%s": %s' % (
+              alt_rule_str, colorize_alterations(q_tokens))).encode('utf-8'))
         # Turn it into a sentence
         for rule in CONVERSION_RULES:
           sent = rule.convert(q, answer, q_tokens, q_const_parse)
@@ -1117,7 +1124,7 @@ def run_end2end(qas, alteration_strategy=None):
             matched = True
             conv_rule_counter[rule.name] += 1
             if not OPTS.quiet:
-              print ('  Convert "%s": %s' % (rule.name, colored(sent, 'green'))).encode('utf-8')
+              print(('  Convert "%s": %s' % (rule.name, colored(sent, 'green'))).encode('utf-8'))
             break
     if matched:
       num_matched += 1
@@ -1125,26 +1132,26 @@ def run_end2end(qas, alteration_strategy=None):
       unmatched_qas.append((question, answer))
   # Print stats
   if not OPTS.quiet:
-    print
-  print '=== Summary ==='
-  print 'Matched %d/%d = %.2f%% questions' % (
-      num_matched, len(qas), 100.0 * num_matched / len(qas))
-  print 'Alteration:'
+    print()
+  print('=== Summary ===')
+  print('Matched %d/%d = %.2f%% questions' % (
+      num_matched, len(qas), 100.0 * num_matched / len(qas)))
+  print('Alteration:')
   for rule_name in ALL_ALTER_RULES:
     num = alt_rule_counter[rule_name]
-    print '  Rule "%s" used %d times = %.2f%%' % (
-        rule_name, num, 100.0 * num / len(qas))
-  print 'Conversion:'
+    print('  Rule "%s" used %d times = %.2f%%' % (
+        rule_name, num, 100.0 * num / len(qas)))
+  print('Conversion:')
   for rule in CONVERSION_RULES:
     num = conv_rule_counter[rule.name]
-    print '  Rule "%s" used %d times = %.2f%%' % (
-        rule.name, num, 100.0 * num / len(qas))
-  print
-  print '=== Sampled unmatched questions ==='
+    print('  Rule "%s" used %d times = %.2f%%' % (
+        rule.name, num, 100.0 * num / len(qas)))
+  print()
+  print('=== Sampled unmatched questions ===')
   for q, a in sorted(random.sample(unmatched_qas, 20), key=lambda x: x[0]):
-    print ('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8')
+    print(('%s [%s]' % (q, colored(a, 'cyan'))).encode('utf-8'))
   
-def dump_data(dataset, prefix, use_answer_placeholder=False, alteration_strategy=None):
+def dump_data(dataset, prefix, data_dir, use_answer_placeholder=False, alteration_strategy=None):
   corenlp_cache = load_cache()
   nearby_word_dict = load_nearby_words()
   postag_dict = load_postag_dict()
@@ -1160,7 +1167,7 @@ def dump_data(dataset, prefix, use_answer_placeholder=False, alteration_strategy
       for qa in paragraph['qas']:
         question = qa['question'].strip()
         if not OPTS.quiet:
-          print ('Question: %s' % question).encode('utf-8')
+          print(('Question: %s' % question).encode('utf-8'))
         if use_answer_placeholder:
           answer = 'ANSWER'
           determiner = ''
@@ -1190,7 +1197,7 @@ def dump_data(dataset, prefix, use_answer_placeholder=False, alteration_strategy
             sent = rule.convert(q_str, answer, q_tokens, q_const_parse)
             if sent:
               if not OPTS.quiet:
-                print ('  Sent (%s): %s' % (tag, colored(sent, 'cyan'))).encode('utf-8')
+                print(('  Sent (%s): %s' % (tag, colored(sent, 'cyan'))).encode('utf-8'))
               cur_qa = {
                   'question': qa['question'],
                   'id': '%s-%s' % (qa['id'], tag),
@@ -1219,17 +1226,18 @@ def dump_data(dataset, prefix, use_answer_placeholder=False, alteration_strategy
     prefix = '%s-mod' % prefix
   if OPTS.prepend:
     prefix = '%s-pre' % prefix
-  with open(os.path.join('out', prefix + '.json'), 'w') as f:
+  with open(os.path.join(data_dir, prefix + '.json'), 'w') as f:
     json.dump(out_obj, f)
-  with open(os.path.join('out', prefix + '-indented.json'), 'w') as f:
+  with open(os.path.join(data_dir, prefix + '-indented.json'), 'w') as f:
     json.dump(out_obj, f, indent=2)
-  with open(os.path.join('out', prefix + '-mturk.tsv'), 'w') as f:
+  with open(os.path.join(data_dir, prefix + '-mturk.tsv'), 'w') as f:
     for qid, sent in mturk_data:
-      print >> f, ('%s\t%s' % (qid, sent)).encode('ascii', 'ignore')
+      print(('%s\t%s' % (qid, sent)).encode('ascii', 'ignore'))
 
 def main():
   dataset = read_data()
   qas = get_qas(dataset)
+  data_dir = DATASETS['data_dir']
   if OPTS.modified_answers:
     global ANSWER_RULES
     ANSWER_RULES = MOD_ANSWER_RULES
@@ -1261,15 +1269,15 @@ def main():
   elif OPTS.command == 'e2e-all':
     run_end2end(qas, alteration_strategy='all')
   elif OPTS.command == 'dump-placeholder':
-    dump_data(dataset, 'convPlaceholder', use_answer_placeholder=True)
+    dump_data(dataset, 'convPlaceholder', data_dir,use_answer_placeholder=True)
   elif OPTS.command == 'dump-lies':
     dump_data(dataset, 'convLies')
   elif OPTS.command == 'dump-highConf':
-    dump_data(dataset, 'convHighConf', alteration_strategy='high-conf')
+    dump_data(dataset, 'convHighConf', data_dir,alteration_strategy='high-conf')
   elif OPTS.command == 'dump-hcSeparate':
-    dump_data(dataset, 'convHCSeparate', alteration_strategy='high-conf-separate')
+    dump_data(dataset, 'convHCSeparate', data_dir,alteration_strategy='high-conf-separate')
   elif OPTS.command == 'dump-altAll':
-    dump_data(dataset, 'convAltAll', alteration_strategy='all')
+    dump_data(dataset, 'convAltAll',data_dir, alteration_strategy='all')
   else:
     raise ValueError('Unknown command "%s"' % OPTS.command)
 
