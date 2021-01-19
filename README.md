@@ -25,9 +25,18 @@ Intructions to Run:
  * Run CoreNLP
    >> python src/py/convert_questions.py corenlp -d train
  * Create Examples
-   >> python src/py/convert_questions.py dump-highConf -d train -q
+   >> python src/py/convert_questions.py dump-highConf -d train 
 
+
+To evaluate the results with the adversarial metrics:
+   
+  Run src/py/eval_squad.py with dataset file and prediction file
+
+  >> python eval_squad.py /data/squad/sample1k-HCVerifyAll.json /out/prediction.json
+  
 ToDo
  * Run the examples with BERT, MatchLSTM, Bidaf and Mreader
  * Change the parser in convert_questions, take the dataset/folder paths and make them arguments
+
+
 
