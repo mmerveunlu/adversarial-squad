@@ -26,8 +26,7 @@ Several changes, I made:
  * Run CoreNLP
    `>> python src/py/convert_questions.py corenlp -d train`
  * Create Examples
-   >> python src/py/convert_questions.py dump-highConf -d train 
-
+   `>> python src/py/convert_questions.py dump-highConf -d train
 
 To evaluate the results with the adversarial metrics:
    
