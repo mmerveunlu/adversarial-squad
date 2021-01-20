@@ -38,9 +38,16 @@ To evaluate the results with the adversarial metrics:
 
   >> python eval_squad.py /data/squad/sample1k-HCVerifyAll.json /out/prediction.json
   
+** Results for BERT models** 
+
+
+| Model | Original | ADDSENT | ADDONESENT |
+| ----------- | ----------- | ----------- | ----------- | 
+| DistilBERT |  86.71 | 48.6 | 59.08 |
+| BERT | 92.8 | 68.00 | 76.9 | 
+| RoBERTa | 94.13 | 76.15 | 82.81 |  
 
 ToDo
- * Run the examples with BERT, MatchLSTM, Bidaf and Mreader
  * Change the parser in `convert_questions()`, take the dataset/folder paths and make them arguments
 
 
