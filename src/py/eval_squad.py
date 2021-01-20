@@ -116,7 +116,7 @@ def evaluate_adversarial(dataset, predictions, verbose=False, id_set=None):
         all_ids.add(orig_id)
         if qa['id'] not in predictions:
           message = 'Unanswered question ' + qa['id'] + ' will receive score 0.'
-          print >> sys.stderr, message
+          print(sys.stderr, message)
           continue
         ground_truths = list(map(lambda x: x['text'], qa['answers']))
         prediction = predictions[qa['id']]
