@@ -19,14 +19,18 @@ Several changes, I made:
 ### Intructions to Run: 
 
  * Under the main project folder, create an output folder.
-   `>> mkdir out-exp`
+   >> mkdir out-exp
+   
  * Precompute nearby words from given file
-   `>> python src/py/find_squad_nearby_words.py glove/glove.6B.100d.txt -n 100 -f data/squad/train-v1.1.json -o out-exp/nearby_n100_glove_6B_100d.json`
+   >> python src/py/find_squad_nearby_words.py glove/glove.6B.100d.txt -n 100 -f data/squad/train-v1.1.json -o out-exp/nearby_n100_glove_6B_100d.json
  * Check the folder paths in convert_questions.py   
  * Run CoreNLP
-   `>> python src/py/convert_questions.py corenlp -d train`
- * Create Examples
-   `>> python src/py/convert_questions.py dump-highConf -d train
+   
+   >> python src/py/convert_questions.py corenlp -d train
+
+* Create Examples
+ 
+   >> python src/py/convert_questions.py dump-highConf -d train
 
 To evaluate the results with the adversarial metrics:
    
@@ -34,9 +38,6 @@ To evaluate the results with the adversarial metrics:
 
   >> python eval_squad.py /data/squad/sample1k-HCVerifyAll.json /out/prediction.json
   
-ToDo
-
-   `>> python src/py/convert_questions.py dump-highConf -d train -q`
 
 ToDo
  * Run the examples with BERT, MatchLSTM, Bidaf and Mreader
