@@ -38,7 +38,7 @@ To evaluate the results with the adversarial metrics:
 
   >> python eval_squad.py /data/squad/sample1k-HCVerifyAll.json /out/prediction.json
   
-** Results for BERT models** 
+### Results for BERT models
 
 
 | Model | Original | ADDSENT | ADDONESENT |
